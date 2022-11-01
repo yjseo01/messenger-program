@@ -276,6 +276,7 @@ void loginPage() {
             } else if (cur == 2) { // login -> pw
                 cur = 1;
                 mvwprintw(win1, 10, 38, "Login   ");
+                wrefresh(win1);
                 move(7, 38);
                 curs_set(1);
             }
@@ -290,6 +291,7 @@ void loginPage() {
                 cur = 2;
                 curs_set(0);
                 mvwprintw(win1, 10, 38, "> Login");
+                wrefresh(win1);
             }
 
         } else {
@@ -391,9 +393,12 @@ void loginPage() {
                                     return;
 
                                 } else { // pw is wrong
-                                    mvwprintw(win2, 2, 0, "pw is wrong");
+                                    mvwprintw(win2, 0, 27,
+                                              "                           ");
+                                    mvwprintw(win2, 0, 27, "pw is wrong");
                                     wrefresh(win2);
-                                    sleep(3);
+
+                                    int anykey = getch();
 
                                     close(datfd);
                                     free(user);
