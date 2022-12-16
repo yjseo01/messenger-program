@@ -32,6 +32,7 @@ struct Server_Client_Communication {
     int result;
 
     // message context
+    char *user_list[MAX_USERS];
 
 } typedef communication;
 
@@ -80,6 +81,7 @@ void startPage(int fd1, int fd2);
 void loginPage(int fd1, int fd2);
 void signupPage(int fd1, int fd2);
 void mainPage(userinfo u, int fd1, int fd2);
+void messageWindow(userinfo u, communication o, int fd1, int fd2);
 
 int main(int argc, char const *argv[]) {
     initscr();
@@ -170,27 +172,28 @@ void mainPage(userinfo u, int fd1, int fd2) {
     wbkgd(win2, COLOR_PAIR(2));
 
     // get user_list
-    /*
-    communication cur_userinfo;
-    strcpy(cur_userinfo.input_id, u.getid());
-    strcpy(cur_userinfo.input_name, u.getname());
-    strcpy(cur_userinfo.input_pw, u.getpw());
+    communication myself;
+    strcpy(myself.input_id, u.getid());
+    myself.classification = myself.message;
 
-    write(fd1, &cur_userinfo,
-          sizeof(communication)); // send
+    write(fd1, &myself, sizeof(myself));
 
-    read(fd2, &cur_userinfo, sizeof(communication));
+    read(fd2, &myself, sizeof(myself));
 
-    */
-
-    // int message_num = cur_userinfo.users_cnt; // number of users;
-    int message_num = 4;
+    int message_num = 0;
+    for (message_num; message_num < MAX_USERS; message_num++) {
+        if (myself.user_list[message_num] == NULL)
+            break;
+    }
 
     int user_list_pages; // number of user list
     user_list_pages = message_num / 14;
 
     message_num % 14 == 0 ? user_list_pages = message_num / 14
                           : user_list_pages = message_num / 14 + 1;
+
+    if (user_list_pages == 0)
+        user_list_pages = 1;
 
     int cur_list_page = 1;
 
@@ -200,11 +203,11 @@ void mainPage(userinfo u, int fd1, int fd2) {
     for (int r = 0; r < 80; r++)
         mvwprintw(win1, 2, r, "=");
 
-    // print message
+    // print list
     mvwprintw(win1, 3, 0, "User List (%d / %d)", cur_list_page,
               user_list_pages);
-    for (int i = 0; i < message_num; i++)
-        mvwprintw(win1, i + 4, 2, "user_id");
+    for (int i = 0; i < message_num && i < 14; i++)
+        mvwprintw(win1, i + 4, 2, "%s", myself.user_list[i]);
 
     // print user infomation
     mvwprintw(win2, 0, 0, "ID: ");
@@ -225,15 +228,41 @@ void mainPage(userinfo u, int fd1, int fd2) {
     wrefresh(win1);
 
     while (true) {
+        mvwprintw(win1, 0, 16, "                 ");
+        mvwprintw(win1, 1, 4, "                  ");
+        wrefresh(win1);
+
         key = getch();
         curs_set(0);
+
+        // print list
+        mvwprintw(win1, 3, 0, "User List (%d / %d)", cur_list_page,
+                  user_list_pages);
+        wrefresh(win1);
+        for (int i = 0; i + 14 * (cur_list_page - 1) < message_num && i < 14;
+             i++)
+            mvwprintw(win1, i + 4, 2, "%s",
+                      myself.user_list[i + 14 * (cur_list_page - 1)]);
 
         if (key != 27)
             escpressed = 0;
 
-        if (key == KEY_UP) {
+        if (key == KEY_RIGHT) { // page up
+            if (cur_list_page < user_list_pages - 1) {
+                cur_list_page += 1;
+            }
+            continue;
+
+        } else if (key == KEY_LEFT) { // page down
+            if (cur_list_page > 1) {
+                cur_list_page -= 1;
+            }
+            continue;
+
+        } else if (key == KEY_UP) {
             // print reset
-            for (int i = 0; i < message_num; i++) {
+            for (int i = 0;
+                 i + 14 * (cur_list_page - 1) < message_num && i < 14; i++) {
                 mvwprintw(win1, i + 4, 0, " ");
             }
             mvwprintw(win2, 0, 72, "  Logout");
@@ -246,7 +275,9 @@ void mainPage(userinfo u, int fd1, int fd2) {
                 curs_set(1);
             }
 
-            for (int i = 0; i < message_num && cur > -1; i++) {
+            for (int i = 0; i + 14 * (cur_list_page - 1) < message_num &&
+                            i < 14 && cur > -1;
+                 i++) {
                 if (i == cur) {
                     mvwprintw(win1, i + 4, 0, ">");
                 }
@@ -260,17 +291,20 @@ void mainPage(userinfo u, int fd1, int fd2) {
 
         } else if (key == KEY_DOWN) {
             // print reset
-            for (int i = 0; i < message_num; i++) {
+            for (int i = 0;
+                 i + 14 * (cur_list_page - 1) < message_num && i < 14; i++) {
                 mvwprintw(win1, i + 4, 0, " ");
             }
             mvwprintw(win2, 0, 72, "  Logout");
             if (cur > -1 && cur < message_num)
                 cur++;
 
-            if (cur == message_num) { // logout selected
+            if (cur == 14) { // logout selected
                 mvwprintw(win2, 0, 72, "> Logout");
             } else {
-                for (int i = 1; i < message_num; i++) { // message selected
+                for (int i = 1;
+                     i + 14 * (cur_list_page - 1) < message_num && i < 14;
+                     i++) { // message selected
                     if (i == cur) {
                         mvwprintw(win1, i + 4, 0, ">");
                     }
@@ -283,10 +317,12 @@ void mainPage(userinfo u, int fd1, int fd2) {
             if (key == 27) {
                 escpressed++;
                 if (escpressed == 1) {
-                    cur = message_num;
+                    cur = 14;
 
                     // reset message
-                    for (int i = 0; i < message_num; i++) {
+                    for (int i = 0;
+                         i + 14 * (cur_list_page - 1) < message_num && i < 14;
+                         i++) {
                         mvwprintw(win1, i + 4, 0, " ");
                     }
 
@@ -300,7 +336,10 @@ void mainPage(userinfo u, int fd1, int fd2) {
                 }
             } else if (cur == -1) { // id input
 
-                char input_id[MAX_LETTERS];
+                mvwprintw(win1, 1, 4, "                  ");
+                wrefresh(win1);
+
+                char input_id[MAX_LETTERS + 1];
                 curs_set(1);
 
                 char ch = key;
@@ -316,15 +355,40 @@ void mainPage(userinfo u, int fd1, int fd2) {
                 }
                 input_id[i] = '\0';
 
-                mvwprintw(win1, 1, 4, "%s", input_id);
-                wrefresh(win1);
+                communication opponent;
+                // opponent.input_id = input_id;
+                opponent.classification = opponent.message;
+                strcpy(opponent.input_id, input_id);
+
+                write(fd1, &opponent, sizeof(communication));
+
+                read(fd2, &opponent, sizeof(communication));
+
+                if (opponent.result == opponent.success) {
+                    // enter message window
+                    mvwprintw(win1, 1, 4, "%s success!", opponent.input_id);
+                    wrefresh(win1);
+
+                    messageWindow(u, opponent, fd1, fd2);
+
+                    break;
+                } else if (opponent.result == opponent.id) {
+                    mvwprintw(win1, 1, 4, "ID doesn't exist");
+                    wrefresh(win1);
+
+                } else {
+                    mvwprintw(win1, 1, 4, "Can't input your ID");
+                    wrefresh(win1);
+                }
+
+                sleep(3);
 
                 curs_set(0);
                 move(4, 0);
                 cur = 0;
             }
             if (key == 10) {
-                if (cur == message_num) { // if logout selected
+                if (cur == 14) { // if logout selected
                     break;
                 }
             }
@@ -332,6 +396,39 @@ void mainPage(userinfo u, int fd1, int fd2) {
     }
     startPage(fd1, fd2);
     return;
+}
+
+void messageWindow(userinfo u, communication o, int fd1, int fd2) {
+    WINDOW *win1 = newwin(24, 80, 0, 0);
+    WINDOW *win2 = newwin(6, 80, 18, 0);
+
+    wbkgd(win1, COLOR_PAIR(1));
+    wbkgd(win2, COLOR_PAIR(2));
+
+    // print messages
+
+    mvwprintw(win2, 0, 0, "Message with %s", o.input_id);
+    mvwprintw(win2, 1, 0, "Input message: ");
+
+    move(1, 15);
+    curs_set(1);
+
+    wrefresh(win1);
+    wrefresh(win2);
+    string input_message;
+
+    char ch = getch();
+
+    int i = 0;
+    while (ch != '\n' && i < MAX_LETTERS && ch != 27) {
+        input_message.push_back(ch);
+        mvwprintw(win2, 1, 15 + i, "%s", &ch);
+        wrefresh(win2);
+        ch = getch();
+        i++;
+    }
+
+    sleep(5);
 }
 
 void loginPage(int fd1, int fd2) {
@@ -422,8 +519,8 @@ void loginPage(int fd1, int fd2) {
                     case 0: {
                         // success!
                         userinfo logined =
-                            userinfo(loginuser->getname(), loginuser->getid(),
-                                     loginuser->getpw());
+                            userinfo(logininfo.input_name, logininfo.input_id,
+                                     logininfo.input_pw);
 
                         free(loginuser);
                         mainPage(logined, fd1, fd2);

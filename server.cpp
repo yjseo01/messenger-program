@@ -34,6 +34,7 @@ struct Server_Client_Communication {
     int result;
 
     // message context
+    char *user_list[MAX_USERS];
 
 } typedef communication;
 
@@ -285,8 +286,8 @@ void login(communication *input, int fd1, int fd2) {
                 // login success
                 if (strcmp(loginuser->getpw(), user->getpw()) == 0) {
 
-                    userinfo logined =
-                        userinfo(user->getname(), user->getid(), user->getpw());
+                    // input->input_id = user->getname();
+                    strcpy(input->input_name, user->getname());
 
                     close(datfd);
                     free(user);
@@ -349,6 +350,208 @@ void message(communication *input, int fd1, int fd2) {
     cout << "<" << input->input_id << ">"
          << " loading user list...";
     fflush(stdout);
+
+    for (int i = 0; i < MAX_USERS; i++) {
+        // input->user_list[i] = "\0";
+        strcat(input->user_list[i], "\0");
+    }
+
+    // find "id.dat" file
+
+    // oepn directory
+    DIR *dp;
+    struct dirent *entry;
+
+    int return_stat;
+    char *file_name;
+    struct stat file_info;
+
+    mode_t file_mode;
+
+    char *cwd = (char *)malloc(sizeof(char) * 1024);
+    getcwd(cwd, 1024);
+    dp = opendir(cwd);
+
+    if (dp != NULL) {
+
+        char *userlist[MAX_USERS];
+        for (int i = 0; i < MAX_USERS; i++) {
+            strcat(userlist[i], "\0");
+        }
+
+        while ((entry = readdir(dp)) != NULL) {
+            if ((return_stat = stat(entry->d_name, &file_info)) == -1) {
+                perror("readdir() error!");
+                exit(0);
+            }
+
+            file_mode = file_info.st_mode;
+
+            if (!S_ISREG(file_mode))
+                continue;
+
+            // get extension .dat
+            char dnamearray[1024];
+            strcpy(dnamearray, entry->d_name);
+
+            if ((strcmp(dnamearray, input->input_id)) != 0)
+                continue;
+            char *dname = strtok(dnamearray, ".");
+            if (entry->d_name[strlen(dname)] != '.')
+                continue;
+            dname = strtok(NULL, ".");
+
+            if ((strcmp(dname, "dat") != 0))
+                continue;
+
+            // read
+            int datfd;
+            char datpath[1024] = "./";
+            strcat(datpath, entry->d_name);
+            ssize_t rSize;
+
+            datfd = open(datpath, O_RDONLY, 0644);
+            if (datfd == -1) {
+                perror("open() error!");
+                exit(-1);
+            }
+
+            lseek(datfd, sizeof(userinfo), SEEK_SET); ////// user list test
+            rSize = read(datfd, (char **)userlist, sizeof(char *));
+            if (rSize == -1) {
+                perror("read() error!");
+                exit(-2);
+            }
+
+            for (int i = 0; i < MAX_USERS; i++) {
+                input->user_list[i] = userlist[i];
+                cout << userlist[i] << endl;
+                if (userlist[i] = NULL)
+                    break;
+            }
+            close(datfd);
+            closedir(dp);
+            free(cwd);
+        }
+    }
+
+    write(fd2, input, sizeof(communication));
+
+    communication opponent;
+    read(fd1, &opponent, sizeof(communication));
+    // find opponent
+
+    cout << "end" << endl;
+
+    cout << "<" << input->input_id << ">"
+         << " enter message window...";
+    fflush(stdout);
+
+    do {
+        // open directory
+        DIR *dp2;
+        struct dirent *entry2;
+
+        int return_stat2;
+        char *file_name2;
+        struct stat file_info2;
+
+        mode_t file_mode2;
+
+        char *cwd2 = (char *)malloc(sizeof(char) * 1024);
+        getcwd(cwd, 1024);
+
+        dp = opendir(cwd);
+        if (dp != NULL) {
+            // read current directory
+            while ((entry2 = readdir(dp)) != NULL) {
+
+                if ((return_stat2 = stat(entry2->d_name, &file_info2)) == -1) {
+                    perror("readdir() error!");
+                    exit(0);
+                }
+
+                file_mode2 = file_info2.st_mode;
+
+                if (!S_ISREG(file_mode2))
+                    continue;
+
+                // get extension .dat
+                char dnamearray2[1024];
+                strcpy(dnamearray2, entry2->d_name);
+
+                char *dname2 = strtok(dnamearray2, ".");
+                if (entry2->d_name[strlen(dname2)] != '.')
+                    continue;
+
+                dname2 = strtok(NULL, ".");
+
+                if ((strcmp(dname2, "dat") != 0))
+                    continue;
+
+                // read .dat file
+                userinfo *user2 = (userinfo *)malloc(sizeof(userinfo));
+                int datfd2; // file discriptor of .dat file
+                char datpath2[1024] = "./";
+                strcat(datpath2, entry2->d_name);
+                ssize_t rSize2;
+
+                datfd2 = open(datpath2, O_RDONLY, 0644);
+                if (datfd2 == -1) {
+                    perror("open() error!");
+                    exit(-1);
+                }
+
+                rSize2 = read(datfd2, (userinfo *)user2, sizeof(userinfo));
+                if (rSize2 == -1) {
+                    perror("read() error!");
+                    exit(-2);
+                }
+
+                if (strcmp(opponent.input_id, user2->getid()) == 0) {
+                    if (strcmp(opponent.input_id, input->input_id) == 0) {
+                        opponent.result = opponent.pw;
+                        cout << "denied -Input error" << endl;
+
+                        write(fd2, &opponent, sizeof(communication));
+
+                        close(datfd2);
+                        free(user2);
+                    }
+                    // find opponent
+                    opponent.result = opponent.success;
+                    cout << "success" << endl;
+                    fflush(stdout);
+
+                    write(fd2, &opponent,
+                          sizeof(communication)); // send success
+
+                    close(datfd2);
+                    free(user2);
+                    closedir(dp2);
+                    free(cwd2);
+
+                    return;
+
+                } else {
+                    close(datfd2);
+                    free(user2);
+                }
+            }
+        }
+        closedir(dp2);
+        free(cwd2);
+
+        // id not exist
+        opponent.result = opponent.id;
+        cout << "denied -ID doesn't exist" << endl;
+        fflush(stdout);
+
+        write(fd2, &opponent,
+              sizeof(communication)); // send id error
+
+    } while (true);
+    return;
 }
 
 int main() {
